@@ -64,6 +64,7 @@ class DDIMSampler(object):
                eta=0.,
                mask=None,
                x0=None,
+               xext=None, blending=0.0, ## added
                temperature=1.,
                noise_dropout=0.,
                score_corrector=None,
@@ -104,7 +105,7 @@ class DDIMSampler(object):
                                                     callback=callback,
                                                     img_callback=img_callback,
                                                     quantize_denoised=quantize_x0,
-                                                    mask=mask, x0=x0,
+                                                    mask=mask, x0=x0, xext=xext, blending=blending,
                                                     ddim_use_original_steps=False,
                                                     noise_dropout=noise_dropout,
                                                     temperature=temperature,
@@ -123,7 +124,7 @@ class DDIMSampler(object):
     def ddim_sampling(self, cond, shape,
                       x_T=None, ddim_use_original_steps=False,
                       callback=None, timesteps=None, quantize_denoised=False,
-                      mask=None, x0=None, img_callback=None, log_every_t=100,
+                      mask=None, x0=None, xext=None, blending=0.0, img_callback=None, log_every_t=100,
                       temperature=1., noise_dropout=0., score_corrector=None, corrector_kwargs=None,
                       unconditional_guidance_scale=1., unconditional_conditioning=None, dynamic_threshold=None,
                       ucg_schedule=None):
@@ -145,6 +146,12 @@ class DDIMSampler(object):
         total_steps = timesteps if ddim_use_original_steps else timesteps.shape[0]
         print(f"Running DDIM Sampling with {total_steps} timesteps")
 
+        if mask is not None:
+            blending_percentage = blending
+            time_range = time_range[ int(len(time_range)*blending_percentage) :]
+        #     ts = torch.full((b,), time_range[0], device=device, dtype=torch.long)
+        #     img = self.model.q_sample(x0, ts)
+
         iterator = tqdm(time_range, desc='DDIM Sampler', total=total_steps)
 
         for i, step in enumerate(iterator):
@@ -154,12 +161,13 @@ class DDIMSampler(object):
             if mask is not None:
                 assert x0 is not None
                 img_orig = self.model.q_sample(x0, ts)  # TODO: deterministic forward pass?
-                img = img_orig * mask + (1. - mask) * img
+                # img = img_orig * mask + (1. - mask) * img
+                img = img * mask + (img_orig) * (1. - mask)
 
             if ucg_schedule is not None:
                 assert len(ucg_schedule) == len(time_range)
                 unconditional_guidance_scale = ucg_schedule[i]
-
+            # predict noise, perfrom guidance
             outs = self.p_sample_ddim(img, cond, ts, index=index, use_original_steps=ddim_use_original_steps,
                                       quantize_denoised=quantize_denoised, temperature=temperature,
                                       noise_dropout=noise_dropout, score_corrector=score_corrector,
@@ -167,6 +175,7 @@ class DDIMSampler(object):
                                       unconditional_guidance_scale=unconditional_guidance_scale,
                                       unconditional_conditioning=unconditional_conditioning,
                                       dynamic_threshold=dynamic_threshold)
+            # img == latents in blended latent diffusion (previous noisy sample)
             img, pred_x0 = outs
             if callback: callback(i)
             if img_callback: img_callback(pred_x0, i)
@@ -174,6 +183,9 @@ class DDIMSampler(object):
             if index % log_every_t == 0 or index == total_steps - 1:
                 intermediates['x_inter'].append(img)
                 intermediates['pred_x0'].append(pred_x0)
+        
+        if mask is not None:
+            img = img * mask + (xext) * (1. - mask)
 
         return img, intermediates
 
