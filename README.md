@@ -4,7 +4,7 @@ Implementation of [Typographic Text Generation with Off-the-Shelf Diffusion Mode
 
 A combination of the off-the-shelf methods ([ControlNet](https://arxiv.org/abs/2302.05543) & [Blended Latent Diffusion](https://arxiv.org/abs/2206.02779)) for typographic text generation.
 
-Refer 'demo.ipynb' for examples of some use cases.
+Refer `demo.ipynb` for examples of some use cases.
 
 # Environment and Pretrained Models (from [ControlNet's official repository](https://github.com/lllyasviel/ControlNet/tree/main/github_page))
 
